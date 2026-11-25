@@ -188,6 +188,40 @@ class ConsultasTests(BaseSQL):
         with self.assertRaisesMessage(ValueError, 'autos o daños'):
             repo.filas_cartera(tipo='vida')
 
+    def test_rango_de_fechas_por_renovacion(self):
+        # RF-09: desde/hasta inclusivos sobre la fecha de fin de la vigencia.
+        a = self.poliza('RG-1', dias_fin=10)
+        b = self.poliza('RG-2', dias_fin=30)
+        c = self.poliza('RG-3', dias_fin=60)
+        ids = lambda **f: {fila['poliza_id'] for fila in repo.filas_cartera(**f)}
+        self.assertEqual(ids(desde=HOY + timedelta(days=10), hasta=HOY + timedelta(days=30)), {a, b})
+        self.assertEqual(ids(desde=HOY + timedelta(days=11)), {b, c})
+        self.assertEqual(ids(hasta=(HOY + timedelta(days=10)).isoformat()), {a})  # también acepta texto AAAA-MM-DD
+        self.assertEqual(ids(desde='', hasta=None), {a, b, c})  # vacío = sin filtro
+
+    def test_rango_de_fechas_por_proximo_cobro(self):
+        con_cobro = self.poliza('RC-1', dias_fin=200, cobros=[(-20, 'pagado'), (15, 'pendiente')])
+        self.poliza('RC-2', dias_fin=200, cobros=[(15, 'pagado')])  # sin cobros pendientes
+        self.poliza('RC-3', dias_fin=200, cobros=[(90, 'pendiente')])
+        filas = repo.filas_cartera(desde=HOY, hasta=HOY + timedelta(days=30), fecha_de='cobro')
+        self.assertEqual([f['poliza_id'] for f in filas], [con_cobro])
+        self.assertEqual(filas[0]['proximo_cobro'], HOY + timedelta(days=15))
+
+    def test_rango_se_combina_con_otros_filtros(self):
+        self.poliza('RX-1', dias_fin=20)
+        danios = self.poliza('RX-2', tipo='danios', dias_fin=20)
+        filas = repo.filas_cartera(tipo='danios', desde=HOY, hasta=HOY + timedelta(days=30))
+        self.assertEqual([f['poliza_id'] for f in filas], [danios])
+
+    def test_rango_invalido(self):
+        for filtros, mensaje in (
+            ({'desde': HOY, 'hasta': HOY - timedelta(days=1)}, 'no puede ser posterior'),
+            ({'desde': '25/11/2026'}, 'fecha válida'),
+            ({'desde': HOY, 'fecha_de': 'emision'}, 'renovación o al cobro'),
+        ):
+            with self.subTest(filtros=filtros), self.assertRaisesMessage(ValueError, mensaje):
+                repo.filas_cartera(**filtros)
+
     def test_listar_asegurados_con_conteos(self):
         self.poliza('L-1')
         cancelada = self.poliza('L-2', tipo='danios')
