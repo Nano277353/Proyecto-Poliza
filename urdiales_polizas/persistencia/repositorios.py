@@ -402,12 +402,24 @@ def registrar_pago(cobro_id):
 
 # --------------------------------------------------------------------------- consultas
 
-def filas_cartera(asegurado_id=None, aseguradora_id=None, tipo=None, estado=None, historico=False):
+# Fechas por las que se puede filtrar un rango (RF-09). Solo expresiones fijas;
+# las fechas del usuario siempre van como parámetros.
+_PROXIMO_COBRO = ("(SELECT MIN(cb.fecha_vencimiento) FROM cobros cb "
+                  "WHERE cb.vigencia_id = v.id AND cb.estado = 'pendiente')")
+FECHAS_FILTRO = {'renovacion': 'v.fecha_fin', 'cobro': _PROXIMO_COBRO}
+
+
+def filas_cartera(asegurado_id=None, aseguradora_id=None, tipo=None, estado=None, historico=False,
+                  desde=None, hasta=None, fecha_de='renovacion'):
     """Cartera con filtros opcionales y combinables (JOIN de 4 tablas).
 
     Por omisión solo trae la vigencia actual de cada póliza; ``historico=True``
     trae también las archivadas. ``proximo_cobro`` es el cobro pendiente más
     próximo, que usa reglas/atencion.py para el aviso de cobranza.
+
+    Rango de fechas (``desde`` y ``hasta``, inclusivos; cualquiera puede faltar):
+    ``fecha_de='renovacion'`` compara la fecha de fin de la vigencia y
+    ``fecha_de='cobro'`` compara el próximo cobro pendiente.
     """
     condiciones, parametros = [], []
     if not historico:
@@ -426,6 +438,20 @@ def filas_cartera(asegurado_id=None, aseguradora_id=None, tipo=None, estado=None
             raise ValueError(mensaje)
         condiciones.append(f'{columna} = %s')  # solo nombres de columna fijos; el valor va parametrizado
         parametros.append(valor)
+    desde = None if desde in (None, '') else _fecha(desde, 'La fecha "desde"')
+    hasta = None if hasta in (None, '') else _fecha(hasta, 'La fecha "hasta"')
+    if desde or hasta:
+        if fecha_de not in FECHAS_FILTRO:
+            raise ValueError('El rango de fechas se aplica a la renovación o al cobro.')
+        if desde and hasta and desde > hasta:
+            raise ValueError('La fecha "desde" no puede ser posterior a la fecha "hasta".')
+        expresion = FECHAS_FILTRO[fecha_de]
+        if desde:
+            condiciones.append(f'{expresion} >= %s')
+            parametros.append(desde.isoformat())
+        if hasta:
+            condiciones.append(f'{expresion} <= %s')
+            parametros.append(hasta.isoformat())
     donde = ('WHERE ' + ' AND '.join(condiciones)) if condiciones else ''
     return _filas(f'''
         SELECT p.id AS poliza_id, v.id AS vigencia_id, v.numero_poliza, v.fecha_inicio, v.fecha_fin,
@@ -435,8 +461,7 @@ def filas_cartera(asegurado_id=None, aseguradora_id=None, tipo=None, estado=None
                a.id AS asegurado_id, a.nombre AS asegurado, c.id AS aseguradora_id, c.nombre AS aseguradora,
                (SELECT group_concat(ve.serie, ', ') FROM vehiculos_asegurados ve
                 WHERE ve.vigencia_id = v.id) AS series,
-               (SELECT MIN(cb.fecha_vencimiento) FROM cobros cb
-                WHERE cb.vigencia_id = v.id AND cb.estado = 'pendiente') AS proximo_cobro
+               {_PROXIMO_COBRO} AS proximo_cobro
         FROM vigencias v
         JOIN polizas p      ON p.id = v.poliza_id
         JOIN asegurados a   ON a.id = p.asegurado_id
