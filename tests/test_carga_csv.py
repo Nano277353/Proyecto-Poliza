@@ -24,6 +24,8 @@ class CargaDemoTests(TestCase):
         celdas = [f[mes] for f in filas for mes in NOMBRES_MESES]
         for marca in ("✓", "C", "R", "*"):
             self.assertTrue(any(marca in celda for celda in celdas), marca)
+        # Las domiciliadas no llevan ninguna C.
+        self.assertTrue(any(f["Forma de pago"] == "Mensual" and not any("C" in f[m] for m in NOMBRES_MESES) for f in filas))
         # Un solo * por fila: el mes de la renovación anual.
         self.assertTrue(all(sum("*" in f[mes] for mes in NOMBRES_MESES) == 1 for f in filas))
 
@@ -111,6 +113,17 @@ class ColumnasDeMesesTests(TestCase):
             (date(2026, 3, 15), "pagado"), (date(2026, 6, 15), "pagado"),
             (date(2026, 9, 15), "pagado"), (date(2026, 12, 15), "pendiente"),
         ])
+
+    def test_tipo_de_cobro_se_deduce_de_la_c(self):
+        # Con C en algún mes → cobranza manual; sin ninguna C → domiciliada (min 1:22:59).
+        mensual_sin_c = self.meses(**{m.lower(): "10 ✓" for m in NOMBRES_MESES})
+        mensual_sin_c = mensual_sin_c.replace("10 ✓", "10 ✓ *", 1)
+        self.cargar(
+            f"Ana Ficticia,GNP,2026,MAN-1,{self.meses(mar='15 C ✓ *', sep='15 C')},Semestral,,,Casa,,,,,En vigor",
+            f"Ana Ficticia,GNP,2026,DOM-1,{mensual_sin_c},Mensual,,,Local,,,,,En vigor",
+        )
+        tipos = {f["numero_poliza"]: f["tipo_cobro"] for f in repositorios.filas_cartera()}
+        self.assertEqual(tipos, {"MAN-1": "manual", "DOM-1": "domiciliado"})
 
     def test_meses_antes_de_la_renovacion_son_del_anio_siguiente(self):
         # Renovación en octubre de 2026: el cobro de abril es de 2027.
