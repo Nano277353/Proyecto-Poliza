@@ -1,0 +1,9 @@
+# Base de datos local: cada quien la crea con "python manage.py migrate"
+*.sqlite3
+*.sqlite3-journal
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
