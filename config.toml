@@ -1,1 +1,23 @@
+# Configuración del despacho. Se lee con urdiales_polizas/configuracion.py.
+
+# Días naturales de anticipación para avisar renovaciones y cobros.
+# Nunca modifica las fechas contractuales.
 anticipacion_dias = 30
+
+# Días inhábiles (AAAA-MM-DD). Si un vencimiento cae en uno de ellos,
+# el aviso se adelanta al día hábil anterior.
+# Lista de ejemplo con días de descanso obligatorio en México; el despacho la ajusta.
+dias_inhabiles = [
+    "2026-12-25",
+    "2027-01-01",
+    "2027-02-01",
+    "2027-03-15",
+    "2027-05-01",
+    "2027-09-16",
+    "2027-11-15",
+    "2027-12-25",
+]
+
+# Compañías de seguros que acepta la carga del CSV (columna "Compañía de seguro").
+# Se comparan sin importar mayúsculas ni acentos: "QUÁLITAS" = "Qualitas".
+aseguradoras = ["Chop Seguros", "Banorte", "GNP", "Acsa Seguros", "Qualitas", "Afirme"]
