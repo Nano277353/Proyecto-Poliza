@@ -13,6 +13,9 @@ Fechas: igual que en el Excel, hay una columna por mes (Ene … Dic). En cada me
 con cobro se escribe el día y sus marcas:
     ✓  cobro pagado        C  cobranza        R  renovación lista para cotizar
     *  fecha anual de renovación (no es un cobro mensual cualquiera)
+Tipo de cobro: el Excel no lo trae en una columna. Si la fila tiene alguna C, la
+cobranza es manual (hay que cobrarle al cliente); si no tiene ninguna, la póliza
+está domiciliada (cargo automático a tarjeta o cuenta) y solo se verifica el cargo.
 El mes con * y el "Año de renovación" dan el inicio de la vigencia anual.
 También se acepta una sola columna "Fecha de renovación" (p. ej. "15/03 ✓").
 
@@ -349,10 +352,12 @@ def limpiar_fila(fila, catalogo, hoy):
             if celda:
                 celdas[mes] = celda
         inicio, cobros = fechas_desde_meses(celdas, anio)
+        con_c = any(marcas["cobranza"] for _, marcas in celdas.values())
         if len(cobros) != 12 // periodo:
             avisos.append(f"la forma de pago {forma_pago} espera {12 // periodo} meses con día y trae {len(cobros)}.")
     else:
         inicio, marcas = leer_fecha_renovacion(fila.get("fecha"), anio)
+        con_c = marcas["cobranza"]
         # Sin columnas de meses: el cobro del periodo actual (✓ = pagado) y el siguiente.
         fechas_cobro = [_sumar_meses(inicio, k * periodo) for k in range(12 // periodo)]
         actual = max((f for f in fechas_cobro if f <= hoy), default=fechas_cobro[0])
@@ -398,6 +403,8 @@ def limpiar_fila(fila, catalogo, hoy):
         "fecha_inicio": inicio, "fecha_fin": fin, "forma_pago": forma_pago,
         "descripcion_riesgo": riesgo, "vehiculo": vehiculo, "estatus": estatus,
         "cobros": cobros, "avisos": avisos,
+        # Sin C en ningún mes = domiciliada (transcripción, min 1:22:59).
+        "tipo_cobro": "manual" if con_c else "domiciliado",
     }
 
 
@@ -545,6 +552,7 @@ def cargar_csv(entrada, hoy=None):
                 vigencia = {
                     "numero_poliza": base["numero_poliza"], "fecha_inicio": base["fecha_inicio"],
                     "fecha_fin": base["fecha_fin"], "forma_pago": base["forma_pago"],
+                    "tipo_cobro": base["tipo_cobro"],
                 }
                 cobros = base["cobros"]
                 poliza_id = repositorios.crear_poliza(
@@ -587,8 +595,8 @@ def cargar_demostracion(archivo=None, hoy=None):
 def generar_filas(cantidad=300, hoy=None):
     """Filas ficticias con las mismas columnas y marcas que el Excel del despacho.
 
-    Cada mes con cobro lleva el día; ✓ si ya se pagó, C si es el siguiente cobro
-    a trabajar (dentro de 30 días o vencido sin pagar), * en el mes de la
+    Cada mes con cobro lleva el día; ✓ si ya se pagó; C en cada cobro de las
+    pólizas de cobranza manual (las domiciliadas no llevan C); * en el mes de la
     renovación anual y R cuando la renovación vence en 30 días o menos.
     """
     if cantidad < 1:
@@ -613,15 +621,14 @@ def generar_filas(cantidad=300, hoy=None):
         forma = formas[poliza % 4]
         periodo = FORMAS_PAGO[forma.lower()]
         celdas = dict.fromkeys(NOMBRES_MESES, "")
-        cobranza_marcada = False
+        domiciliada = forma == "Mensual" and poliza % 8 == 0  # cargo automático: sin C
         for k in range(12 // periodo):
             fecha = _sumar_meses(inicio, k * periodo)
             # Algunos cobros vencidos quedan sin pagar para que haya cobranza pendiente.
             pagado = fecha <= hoy and not (poliza % 6 == 1 and fecha > hoy - timedelta(days=45))
-            marcas = " ✓" if pagado else ""
-            if not pagado and not cobranza_marcada and (fecha - hoy).days <= 30:
-                marcas += " C"
-                cobranza_marcada = True
+            marcas = "" if domiciliada else " C"
+            if pagado:
+                marcas += " ✓"
             if k == 0:
                 marcas += " *"
                 if 0 <= (fin - hoy).days <= 30:
