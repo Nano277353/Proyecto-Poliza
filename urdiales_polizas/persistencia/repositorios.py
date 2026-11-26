@@ -12,6 +12,7 @@ Las tablas, restricciones y triggers están en esquema.sql. Este módulo:
 Los errores de la base se convierten en ValueError con mensajes comprensibles.
 """
 from datetime import date
+import unicodedata
 
 from django.db import IntegrityError, connection, transaction
 from django.utils import timezone
@@ -239,7 +240,11 @@ def _cobro(datos):
     return Cobro(_fecha(datos.get('fecha_vencimiento'), 'La fecha del cobro'), datos.get('estado', 'pendiente'))
 
 
-def _insertar_vigencia(poliza_id, vigencia, vehiculos, cobros, renueva_a_id=None):
+def _datos_vigencia(vigencia):
+    """Valida y normaliza los campos de una vigencia (alta, renovación o corrección)."""
+    numero = _espacios(vigencia.get('numero_poliza')).upper()
+    if not numero:
+        raise ValueError('El número de póliza es obligatorio.')
     tipo_cobro = vigencia.get('tipo_cobro') or 'manual'
     if tipo_cobro not in TIPOS_COBRO:
         raise ValueError('El tipo de cobro debe ser manual o domiciliado.')
@@ -251,12 +256,18 @@ def _insertar_vigencia(poliza_id, vigencia, vehiculos, cobros, renueva_a_id=None
     fin = _fecha(vigencia.get('fecha_fin'), 'La fecha de fin')
     if fin <= inicio:
         raise ValueError('La fecha de fin debe ser posterior a la de inicio.')
+    return {'numero_poliza': numero, 'fecha_inicio': inicio, 'fecha_fin': fin, 'forma_pago': forma_pago,
+            'tipo_cobro': tipo_cobro, 'sin_gracia': bool(vigencia.get('sin_gracia'))}
+
+
+def _insertar_vigencia(poliza_id, vigencia, vehiculos, cobros, renueva_a_id=None):
+    datos = _datos_vigencia(vigencia)
     vigencia_id = _ejecutar('''
         INSERT INTO vigencias (poliza_id, numero_poliza, fecha_inicio, fecha_fin, forma_pago,
                                tipo_cobro, sin_gracia, renueva_a_id)
         VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-    ''', [poliza_id, _espacios(vigencia.get('numero_poliza')).upper(), inicio.isoformat(), fin.isoformat(),
-          forma_pago, tipo_cobro, int(bool(vigencia.get('sin_gracia'))), renueva_a_id])
+    ''', [poliza_id, datos['numero_poliza'], datos['fecha_inicio'].isoformat(), datos['fecha_fin'].isoformat(),
+          datos['forma_pago'], datos['tipo_cobro'], int(datos['sin_gracia']), renueva_a_id])
     for vehiculo in vehiculos:
         _ejecutar('''INSERT INTO vehiculos_asegurados (vigencia_id, descripcion, modelo, serie, inciso)
                      VALUES (%s, %s, %s, %s, %s)''',
@@ -400,6 +411,89 @@ def registrar_pago(cobro_id):
     _ejecutar('UPDATE cobros SET estado = %s WHERE id = %s', [cobro.estado, cobro_id])
 
 
+# --------------------------------------------------------------------------- correcciones (RF-04)
+
+def _vigencia_editable(vigencia_id):
+    """Fila de la vigencia con el estado de su póliza; solo la vigencia actual de una póliza en vigor se corrige."""
+    fila = _uno('''
+        SELECT v.*, p.estado, p.tipo
+        FROM vigencias v JOIN polizas p ON p.id = v.poliza_id
+        WHERE v.id = %s
+    ''', [_id(vigencia_id, 'vigencia')], 'No se encontró la vigencia.')
+    if fila['archivada']:
+        raise ValueError('Las vigencias del histórico no se editan.')
+    if fila['estado'] == EstadoPoliza.CANCELADA.value:
+        raise ValueError('Una póliza cancelada no se edita.')
+    return fila
+
+
+def datos_vigencia(vigencia_id):
+    """Datos de una vigencia para llenar el formulario de corrección."""
+    return _uno('''
+        SELECT v.id, v.poliza_id, v.numero_poliza, v.fecha_inicio, v.fecha_fin, v.forma_pago,
+               v.tipo_cobro, v.sin_gracia, v.archivada, v.renueva_a_id, p.tipo, p.estado
+        FROM vigencias v JOIN polizas p ON p.id = v.poliza_id
+        WHERE v.id = %s
+    ''', [_id(vigencia_id, 'vigencia')], 'No se encontró la vigencia.')
+
+
+@transaction.atomic
+def actualizar_vigencia(vigencia_id, numero_poliza=None, fecha_inicio=None, fecha_fin=None,
+                        forma_pago=None, tipo_cobro=None, sin_gracia=None):
+    """Corrige los datos capturados de la vigencia actual. Lo que llega en None no cambia.
+
+    Si un dato no es válido (por ejemplo, la fecha 2026-02-30) no se guarda nada.
+    """
+    actual = _vigencia_editable(vigencia_id)
+    cambios = {'numero_poliza': numero_poliza, 'fecha_inicio': fecha_inicio, 'fecha_fin': fecha_fin,
+               'forma_pago': forma_pago, 'tipo_cobro': tipo_cobro, 'sin_gracia': sin_gracia}
+    datos = _datos_vigencia({campo: actual[campo] if valor is None else valor for campo, valor in cambios.items()})
+    if actual['renueva_a_id']:
+        anterior = _uno('SELECT fecha_fin FROM vigencias WHERE id = %s', [actual['renueva_a_id']],
+                        'No se encontró la vigencia anterior.')
+        if datos['fecha_inicio'] < anterior['fecha_fin']:
+            raise ValueError('La renovación debe iniciar cuando termina la vigencia anterior o después.')
+    _ejecutar('''
+        UPDATE vigencias
+        SET numero_poliza = %s, fecha_inicio = %s, fecha_fin = %s, forma_pago = %s,
+            tipo_cobro = %s, sin_gracia = %s
+        WHERE id = %s
+    ''', [datos['numero_poliza'], datos['fecha_inicio'].isoformat(), datos['fecha_fin'].isoformat(),
+          datos['forma_pago'], datos['tipo_cobro'], int(datos['sin_gracia']), actual['id']])
+    obtener_poliza(actual['poliza_id'])  # el dominio vuelve a validar; un ValueError revierte todo
+
+
+def listar_vehiculos(vigencia_id):
+    return _filas('SELECT id, vigencia_id, descripcion, modelo, serie, inciso FROM vehiculos_asegurados '
+                  'WHERE vigencia_id = %s ORDER BY id', [_id(vigencia_id, 'vigencia')])
+
+
+@transaction.atomic
+def actualizar_vehiculo(vehiculo_id, descripcion=None, modelo=None, serie=None, inciso=None):
+    """Corrige un vehículo de la vigencia actual (por ejemplo, una serie mal escrita)."""
+    fila = _uno('SELECT * FROM vehiculos_asegurados WHERE id = %s', [_id(vehiculo_id, 'vehículo')],
+                'No se encontró el vehículo.')
+    actual = _vigencia_editable(fila['vigencia_id'])
+    cambios = {'descripcion': descripcion, 'modelo': modelo, 'serie': serie, 'inciso': inciso}
+    vehiculo = _vehiculo({campo: fila[campo] if valor is None else valor for campo, valor in cambios.items()})
+    _ejecutar('''
+        UPDATE vehiculos_asegurados SET descripcion = %s, modelo = %s, serie = %s, inciso = %s
+        WHERE id = %s
+    ''', [vehiculo.descripcion, vehiculo.modelo, vehiculo.serie, vehiculo.inciso, fila['id']])
+    obtener_poliza(actual['poliza_id'])  # el dominio valida series e incisos; un ValueError revierte todo
+
+
+@transaction.atomic
+def eliminar_cobro(cobro_id):
+    """Quita un cobro pendiente capturado por error. Los cobros pagados se conservan."""
+    fila = _uno('SELECT id, vigencia_id, estado FROM cobros WHERE id = %s', [_id(cobro_id, 'cobro')],
+                'No se encontró el cobro.')
+    _vigencia_editable(fila['vigencia_id'])
+    if fila['estado'] == 'pagado':
+        raise ValueError('Un cobro pagado no se elimina.')
+    _ejecutar('DELETE FROM cobros WHERE id = %s', [fila['id']])
+
+
 # --------------------------------------------------------------------------- consultas
 
 # Fechas por las que se puede filtrar un rango (RF-09). Solo expresiones fijas;
@@ -501,6 +595,70 @@ def buscar_por_serie(ultimos_digitos):
         WHERE substr(upper(ve.serie), -length(%s)) = %s
         ORDER BY p.estado DESC, v.fecha_fin
     ''', [digitos, digitos])
+
+
+def _sin_acentos(texto):
+    '''Minúsculas y sin acentos, para que "jose" encuentre "José" y "nunez" a "Núñez".'''
+    if texto is None:
+        return None
+    letras = unicodedata.normalize('NFKD', str(texto))
+    return ''.join(c for c in letras if not unicodedata.combining(c)).casefold()
+
+
+def _patron_contiene(texto):
+    '''Patrón LIKE "contiene"; % y _ escritos por la persona se buscan como texto, no como comodín.'''
+    escapado = texto.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
+    return f'%{escapado}%'
+
+
+MINIMO_BUSQUEDA = 2
+LIMITE_BUSQUEDA = 50
+
+
+def buscar_incremental(texto, limite=20):
+    '''Búsqueda mientras se escribe (RF-17): nombre del asegurado, número de póliza o serie.
+
+    Busca "contiene" (sirve para los últimos dígitos de la serie), sin distinguir
+    mayúsculas ni acentos, solo en la vigencia actual de cada póliza. Con menos de
+    2 caracteres devuelve una lista vacía para no cargar toda la cartera. Un
+    asegurado sin pólizas también aparece (con los campos de la póliza en None).
+    '''
+    texto = _espacios(texto)
+    if len(texto) < MINIMO_BUSQUEDA:
+        return []
+    try:
+        limite = int(limite)
+    except (TypeError, ValueError):
+        raise ValueError('El límite de resultados debe ser un número entero.') from None
+    if not 1 <= limite <= LIMITE_BUSQUEDA:
+        raise ValueError(f'El límite de resultados debe estar entre 1 y {LIMITE_BUSQUEDA}.')
+    nombre = _patron_contiene(_sin_acentos(texto))
+    clave = _patron_contiene(texto.upper().replace(' ', ''))  # número de póliza y serie se guardan así
+    connection.ensure_connection()
+    connection.connection.create_function('sin_acentos', 1, _sin_acentos, deterministic=True)
+    return _filas(r'''
+        SELECT a.id AS asegurado_id, a.nombre AS asegurado,
+               p.id AS poliza_id, p.tipo, p.estado,
+               v.id AS vigencia_id, v.numero_poliza, v.fecha_fin,
+               c.nombre AS aseguradora,
+               (SELECT group_concat(ve.serie, ', ') FROM vehiculos_asegurados ve
+                WHERE ve.vigencia_id = v.id) AS series,
+               CASE
+                   WHEN sin_acentos(a.nombre) LIKE %s ESCAPE '\' THEN 'nombre'
+                   WHEN v.numero_poliza LIKE %s ESCAPE '\' THEN 'poliza'
+                   ELSE 'serie'
+               END AS coincide_en
+        FROM asegurados a
+        LEFT JOIN polizas p      ON p.asegurado_id = a.id
+        LEFT JOIN vigencias v    ON v.poliza_id = p.id AND v.archivada = 0
+        LEFT JOIN aseguradoras c ON c.id = p.aseguradora_id
+        WHERE sin_acentos(a.nombre) LIKE %s ESCAPE '\'
+           OR v.numero_poliza LIKE %s ESCAPE '\'
+           OR EXISTS (SELECT 1 FROM vehiculos_asegurados ve
+                      WHERE ve.vigencia_id = v.id AND ve.serie LIKE %s ESCAPE '\')
+        ORDER BY a.nombre COLLATE NOCASE, a.id, p.estado DESC, v.fecha_fin
+        LIMIT %s
+    ''', [nombre, clave, nombre, clave, clave, limite])
 
 
 def polizas_por_aseguradora():
