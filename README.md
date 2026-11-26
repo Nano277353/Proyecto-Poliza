@@ -103,6 +103,7 @@ Las rutas están dentro de `urdiales_polizas/`, salvo las marcadas como «raíz�
 | `interfaz/views.py`, `forms.py`, `urls.py` | Pantallas: atender solicitudes y llamar a los servicios | — |
 | `interfaz/templates/`, `interfaz/static/` | Plantillas HTML, estilos y scripts | — |
 | `interfaz/migrations/0001_inicial.py` | Crear la base aplicando `esquema.sql` | Declarativo |
+| `interfaz/migrations/0002_triggers_edicion.py` | Agregar a bases ya creadas los triggers que protegen la corrección de vigencias y cobros | Declarativo |
 | `interfaz/management/commands/cargar_demo.py` | Comando para cargar o generar el CSV | Imperativo |
 | `aplicacion/servicios.py` | Coordinar registros, consultas, renovaciones, cobros y cancelaciones | — |
 | `dominio/clientes.py` | Asegurados, contactos y medios de contacto | Orientado a objetos |

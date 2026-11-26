@@ -173,3 +173,25 @@ WHEN NEW.fecha_vencimiento NOT BETWEEN
 BEGIN
     SELECT RAISE(ABORT, 'La fecha del cobro debe estar dentro de la vigencia.');
 END;
+
+-- Al corregir las fechas de una vigencia, sus cobros deben seguir dentro de ella.
+CREATE TRIGGER cobros_dentro_de_vigencia_editada
+BEFORE UPDATE OF fecha_inicio, fecha_fin ON vigencias
+WHEN EXISTS (
+    SELECT 1 FROM cobros
+    WHERE vigencia_id = NEW.id
+      AND fecha_vencimiento NOT BETWEEN NEW.fecha_inicio AND NEW.fecha_fin
+)
+BEGIN
+    SELECT RAISE(ABORT, 'Hay cobros fuera de las nuevas fechas de la vigencia; corrígelos o elimínalos primero.');
+END;
+
+-- Al corregir la fecha de un cobro, sigue dentro de su vigencia.
+CREATE TRIGGER cobro_editado_dentro_de_vigencia
+BEFORE UPDATE OF fecha_vencimiento ON cobros
+WHEN NEW.fecha_vencimiento NOT BETWEEN
+     (SELECT fecha_inicio FROM vigencias WHERE id = NEW.vigencia_id)
+ AND (SELECT fecha_fin    FROM vigencias WHERE id = NEW.vigencia_id)
+BEGIN
+    SELECT RAISE(ABORT, 'La fecha del cobro debe estar dentro de la vigencia.');
+END;
