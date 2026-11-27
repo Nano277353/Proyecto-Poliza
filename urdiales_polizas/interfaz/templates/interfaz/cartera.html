@@ -1,0 +1,19 @@
+{% extends 'interfaz/base.html' %}
+{% block content %}
+<div class="page-header">
+  <div><p class="eyebrow">{% if es_historico %}CONSULTA DE PERIODOS{% else %}SEGUIMIENTO DIARIO{% endif %}</p><h1 class="page-title">{{ titulo }}</h1><p class="page-subtitle">{% if es_historico %}Vigencias anteriores, vencidas y pólizas canceladas.{% else %}Consulta las vigencias actuales y sus próximas fechas.{% endif %}</p></div>
+  <div class="actions"><a class="button" href="{% url 'interfaz:poliza_nueva' %}">+ Nueva póliza</a></div>
+</div>
+<section class="card filters" aria-label="Filtros de pólizas">
+  <form method="get">
+    {{ form.non_field_errors }}
+    <div class="filter-grid">{% for campo in form %}{% include 'interfaz/campo.html' with campo=campo %}{% endfor %}</div>
+    <div class="form-actions"><button class="button" type="submit">Aplicar filtros</button><a class="text-link" href="{% if es_historico %}{% url 'interfaz:historico' %}{% else %}{% url 'interfaz:cartera' %}{% endif %}">Limpiar filtros</a></div>
+  </form>
+</section>
+<section class="card">
+  <div class="card-header"><h2>{% if es_historico %}Periodos registrados{% else %}Pólizas actuales{% endif %} <span class="badge muted">{{ registros|length }}</span></h2><span class="muted">Fechas más próximas primero</span></div>
+  {% if error_lectura %}<div class="notice error">No se pudo consultar la cartera. Los filtros se conservaron; intenta de nuevo.</div>{% elif form.errors %}<div class="empty-state">Corrige los filtros para continuar.</div>{% else %}{% include 'interfaz/tabla_polizas.html' %}{% endif %}
+</section>
+<p class="helptext">La atención se calcula con días naturales y se muestra con fecha y motivo. Los cobros se registran manualmente.</p>
+{% endblock %}

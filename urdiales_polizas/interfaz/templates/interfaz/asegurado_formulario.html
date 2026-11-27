@@ -1,0 +1,9 @@
+{% extends 'interfaz/base.html' %}
+{% block content %}
+<div class="page-header"><div><p class="eyebrow">FICHA DEL ASEGURADO</p><h1 class="page-title">{{ titulo }}</h1><p class="page-subtitle">Los teléfonos y correos son opcionales. Puedes agregar varios contactos.</p></div></div>
+<form method="post" novalidate>{% csrf_token %}
+<section class="card form-section"><h2 class="section-title">Datos del asegurado</h2>{{ form.non_field_errors }}<div class="form-grid">{% for campo in form %}{% include 'interfaz/campo.html' with campo=campo %}{% endfor %}</div></section>
+<section class="card form-section"><h2 class="section-title">Contactos y referentes</h2><p class="helptext">Deja vacía la fila si no necesitas registrar contactos. Marca «Eliminar» para retirar una fila existente.</p>{% include 'interfaz/formset.html' with conjunto=contactos agregar='Agregar otro contacto' %}</section>
+<div class="form-actions"><button class="button" type="submit">Guardar asegurado</button><a class="button secondary" href="{% if asegurado %}{% url 'interfaz:asegurado_detalle' asegurado.id %}{% else %}{% url 'interfaz:asegurados' %}{% endif %}">Volver</a></div>
+</form>
+{% endblock %}

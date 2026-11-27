@@ -1,0 +1,14 @@
+<div data-formset-prefix="{{ conjunto.prefix }}">
+  {{ conjunto.management_form }}
+  {{ conjunto.non_form_errors }}
+  <div class="formset-rows" data-formset-rows>
+    {% for fila in conjunto %}
+      <div class="formset-row">
+        {{ fila.non_field_errors }}
+        <div class="form-grid">{% for campo in fila %}{% include 'interfaz/campo.html' with campo=campo %}{% endfor %}</div>
+      </div>
+    {% endfor %}
+  </div>
+  <template data-empty-form><div class="formset-row"><div class="form-grid">{% for campo in conjunto.empty_form %}{% include 'interfaz/campo.html' with campo=campo %}{% endfor %}</div></div></template>
+  <button class="button secondary small" type="button" data-add-formset="{{ conjunto.prefix }}">{{ agregar }}</button>
+</div>

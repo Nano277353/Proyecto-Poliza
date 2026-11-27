@@ -1,0 +1,7 @@
+{% if campo.is_hidden %}{{ campo }}{{ campo.errors }}{% else %}
+<div class="field {% if campo.field.widget.input_type == 'checkbox' %}checkbox-field{% endif %}">
+  {{ campo.label_tag }}{{ campo }}
+  {% if campo.help_text %}<span class="helptext">{{ campo.help_text }}</span>{% endif %}
+  {{ campo.errors }}
+</div>
+{% endif %}

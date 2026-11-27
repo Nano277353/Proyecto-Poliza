@@ -1,0 +1,7 @@
+{% extends 'interfaz/base.html' %}
+{% block content %}
+<div class="page-header"><div><p class="eyebrow">FICHA DEL ASEGURADO</p><h1 class="page-title">{{ asegurado.nombre }}</h1></div><div class="actions"><a class="button secondary" href="{% url 'interfaz:asegurado_editar' asegurado.id %}">Editar ficha</a><a class="button" href="{% url 'interfaz:poliza_nueva' %}?asegurado={{ asegurado.id }}">+ Nueva póliza</a></div></div>
+<section class="card"><div class="card-header"><h2>Contactos</h2></div><div class="card-body detail-grid">{% for contacto in asegurado.contactos %}<div><h3>{{ contacto.nombre|default:'Contacto sin nombre' }} <span class="badge muted">{% if contacto.rol == 'referente' %}Referente{% else %}General{% endif %}</span></h3><ul class="contact-list">{% for telefono in contacto.telefonos %}<li>Teléfono: {{ telefono }}</li>{% endfor %}{% for correo in contacto.correos %}<li>Correo: {{ correo }}</li>{% endfor %}</ul>{% if not contacto.telefonos and not contacto.correos %}<p class="muted">Sin medios de contacto registrados.</p>{% endif %}</div>{% empty %}<p class="muted">No hay contactos registrados.</p>{% endfor %}</div></section>
+<section class="card"><div class="card-header"><h2>Pólizas actuales</h2></div>{% include 'interfaz/tabla_polizas.html' with registros=actuales %}</section>
+<section class="card"><div class="card-header"><h2>Histórico del asegurado</h2></div>{% include 'interfaz/tabla_polizas.html' with registros=anteriores %}</section>
+{% endblock %}

@@ -1,0 +1,5 @@
+{% extends 'interfaz/base.html' %}
+{% block content %}
+<div class="page-header"><div><p class="eyebrow">CONFIRMACIÓN</p><h1 class="page-title">Cancelar póliza</h1></div></div>
+<section class="card form-section"><h2 class="section-title">{{ poliza.asegurado }} · {{ poliza.aseguradora }}</h2><p>La póliza y todos sus periodos pasarán a consulta en el histórico. Se conservarán sus vehículos, riesgos y cobros.</p><div class="notice warning">Esta cancelación impide reactivar o renovar la póliza.</div><form method="post">{% csrf_token %}<input type="hidden" name="confirmar" value="si"><div class="form-actions"><button class="button danger" type="submit">Confirmar cancelación</button><a class="button secondary" href="{% url 'interfaz:poliza_detalle' poliza.id %}">Volver sin cancelar</a></div></form></section>
+{% endblock %}

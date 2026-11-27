@@ -1,0 +1,19 @@
+{% if registros %}
+<div class="table-wrap">
+<table class="data-table">
+  <thead><tr><th scope="col">Póliza / asegurado</th><th scope="col">Aseguradora</th><th scope="col">Tipo</th><th scope="col">Renovación</th><th scope="col">Próximo cobro</th><th scope="col">Atención</th></tr></thead>
+  <tbody>
+  {% for fila in registros %}
+  <tr>
+    <td><a class="text-link" href="{% url 'interfaz:poliza_detalle' fila.poliza_id %}?vigencia={{ fila.id }}">{{ fila.numero_poliza }}</a><small>{{ fila.asegurado }}</small></td>
+    <td>{{ fila.aseguradora }}</td><td>{% if fila.tipo == 'autos' %}Autos{% else %}Daños{% endif %}</td>
+    <td>{{ fila.fecha_fin|date:'d/m/Y' }}</td><td>{% if fila.proximo_cobro %}{{ fila.proximo_cobro|date:'d/m/Y' }}{% else %}<span class="muted">Sin pendientes</span>{% endif %}</td>
+    <td>{% if fila.estado == 'cancelada' %}<span class="badge danger">Cancelada</span>{% elif fila.motivos %}{% for motivo in fila.motivos %}<span class="badge warning">{{ motivo }}</span>{% endfor %}{% elif fila.archivada %}<span class="badge muted">Periodo anterior</span>{% elif fila.es_historica %}<span class="badge muted">Vencida</span>{% else %}<span class="badge success">Sin atención próxima</span>{% endif %}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<div class="empty-state"><strong>No hay pólizas que coincidan.</strong><p>Prueba con otros filtros o registra una nueva póliza.</p></div>
+{% endif %}

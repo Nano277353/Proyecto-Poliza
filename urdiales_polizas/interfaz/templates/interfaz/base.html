@@ -1,0 +1,31 @@
+{% load static %}
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#123449">
+  <title>{{ titulo }} · Urdiales Asesores</title>
+  <link rel="stylesheet" href="{% static 'interfaz/sitio.css' %}">
+  <script src="{% static 'interfaz/sitio.js' %}" defer></script>
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar">
+    <a class="brand" href="{% url 'interfaz:cartera' %}"><span class="brand-mark">U</span><span>URDIALES<small>ASESORES</small></span></a>
+    <nav aria-label="Navegación principal">
+      <a class="nav-link {% if seccion == 'cartera' %}active{% endif %}" href="{% url 'interfaz:cartera' %}" {% if seccion == 'cartera' %}aria-current="page"{% endif %}>Cartera de pólizas</a>
+      <a class="nav-link {% if seccion == 'historico' %}active{% endif %}" href="{% url 'interfaz:historico' %}" {% if seccion == 'historico' %}aria-current="page"{% endif %}>Histórico</a>
+      <a class="nav-link {% if seccion == 'asegurados' %}active{% endif %}" href="{% url 'interfaz:asegurados' %}" {% if seccion == 'asegurados' %}aria-current="page"{% endif %}>Asegurados</a>
+      <a class="nav-link {% if seccion == 'aseguradoras' %}active{% endif %}" href="{% url 'interfaz:aseguradoras' %}" {% if seccion == 'aseguradoras' %}aria-current="page"{% endif %}>Aseguradoras</a>
+    </nav>
+    <p class="sidebar-note">Clientes, vigencias y cobros<br>en un solo lugar.</p>
+  </aside>
+  <main class="main" id="contenido">
+    <div class="topbar"><span>CONTROL DE PÓLIZAS</span><span>Urdiales Asesores</span></div>
+    {% if messages %}<div class="messages" aria-live="polite">{% for message in messages %}<div class="notice {{ message.tags }}">{{ message }}</div>{% endfor %}</div>{% endif %}
+    {% block content %}{% endblock %}
+  </main>
+</div>
+</body>
+</html>

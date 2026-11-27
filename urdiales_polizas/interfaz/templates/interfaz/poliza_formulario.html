@@ -1,0 +1,26 @@
+{% extends 'interfaz/base.html' %}
+{% block content %}
+<div class="page-header"><div><p class="eyebrow">{% if modo == 'renovar' %}NUEVO PERIODO{% else %}REGISTRO DE PÓLIZA{% endif %}</p><h1 class="page-title">{{ titulo }}</h1><p class="page-subtitle">{% if modo == 'renovar' %}Revisa los riesgos y captura las nuevas fechas. El periodo anterior se conservará completo.{% else %}Completa los datos de la póliza, sus riesgos y los cobros que conozcas.{% endif %}</p></div></div>
+{% if modo == 'crear' %}<p class="helptext">¿Falta un registro? <a class="text-link" href="{% url 'interfaz:asegurado_nuevo' %}">Agregar asegurado</a> · <a class="text-link" href="{% url 'interfaz:aseguradoras' %}">Agregar aseguradora</a></p>{% endif %}
+<form method="post" novalidate>{% csrf_token %}
+<section class="card form-section"><h2 class="section-title">Póliza y vigencia</h2>{{ form.non_field_errors }}<div class="form-grid">
+{% include 'interfaz/campo.html' with campo=form.vigencia_id %}
+{% include 'interfaz/campo.html' with campo=form.asegurado_id %}
+{% include 'interfaz/campo.html' with campo=form.aseguradora_id %}
+{% include 'interfaz/campo.html' with campo=form.tipo %}
+<div data-auto-fields>{% include 'interfaz/campo.html' with campo=form.modalidad_auto %}</div>
+{% include 'interfaz/campo.html' with campo=form.numero_poliza %}
+{% include 'interfaz/campo.html' with campo=form.forma_pago %}
+{% include 'interfaz/campo.html' with campo=form.tipo_cobro %}
+{% include 'interfaz/campo.html' with campo=form.sin_gracia %}
+{% include 'interfaz/campo.html' with campo=form.responsable %}
+{% include 'interfaz/campo.html' with campo=form.fecha_inicio %}
+{% include 'interfaz/campo.html' with campo=form.fecha_fin %}
+<div class="span-2">{% include 'interfaz/campo.html' with campo=form.aplica_anticipacion %}</div>
+<div class="span-2" data-danios-fields>{% include 'interfaz/campo.html' with campo=form.descripcion_riesgo %}</div>
+</div></section>
+<section class="card form-section" data-auto-fields><h2 class="section-title">Vehículos asegurados</h2><p class="helptext">Individual: registra un vehículo. Flotilla: registra cada unidad con serie e inciso propios.</p>{% include 'interfaz/formset.html' with conjunto=vehiculos agregar='Agregar otro vehículo' %}</section>
+<section class="card form-section"><h2 class="section-title">Cobros del periodo</h2><p class="helptext">Captura únicamente las fechas conocidas. La forma de pago no genera cobros automáticamente.{% if modo == 'renovar' %} Los cobros del periodo anterior no se copian.{% endif %} Marca «Eliminar» para retirar un cobro pendiente. Los cobros pagados se conservan.</p>{% include 'interfaz/formset.html' with conjunto=cobros agregar='Agregar otro cobro' %}</section>
+<div class="form-actions"><button class="button" type="submit">{% if modo == 'renovar' %}Guardar nueva vigencia{% else %}Guardar póliza{% endif %}</button><a class="button secondary" href="{% if poliza %}{% url 'interfaz:poliza_detalle' poliza.id %}{% else %}{% url 'interfaz:cartera' %}{% endif %}">Volver</a></div>
+</form>
+{% endblock %}

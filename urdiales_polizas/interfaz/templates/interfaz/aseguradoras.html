@@ -1,0 +1,6 @@
+{% extends 'interfaz/base.html' %}
+{% block content %}
+<div class="page-header"><div><p class="eyebrow">CATÁLOGO</p><h1 class="page-title">Aseguradoras</h1><p class="page-subtitle">Agrega las compañías que emiten las pólizas de la cartera.</p></div></div>
+<section class="card form-section"><h2 class="section-title">Agregar aseguradora</h2><form method="post" novalidate>{% csrf_token %}{{ form.non_field_errors }}<div class="inline-form">{% for campo in form %}{% include 'interfaz/campo.html' with campo=campo %}{% endfor %}<button class="button" type="submit">Guardar aseguradora</button></div></form></section>
+<section class="card"><div class="card-header"><h2>Compañías registradas</h2></div>{% if aseguradoras %}<div class="table-wrap"><table class="data-table"><thead><tr><th scope="col">Aseguradora</th></tr></thead><tbody>{% for aseguradora in aseguradoras %}<tr><td>{{ aseguradora.nombre }}</td></tr>{% endfor %}</tbody></table></div>{% else %}<div class="empty-state">Aún no hay aseguradoras. Agrega la primera para registrar una póliza.</div>{% endif %}</section>
+{% endblock %}

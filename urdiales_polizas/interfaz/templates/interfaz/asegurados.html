@@ -1,0 +1,8 @@
+{% extends 'interfaz/base.html' %}
+{% block content %}
+<div class="page-header"><div><p class="eyebrow">PERSONAS Y CONTACTOS</p><h1 class="page-title">Asegurados</h1><p class="page-subtitle">Encuentra cada ficha y sus pólizas relacionadas.</p></div><a class="button" href="{% url 'interfaz:asegurado_nuevo' %}">+ Nuevo asegurado</a></div>
+<section class="card filters"><form method="get" class="inline-form"><div class="field"><label for="busqueda">Buscar por nombre</label><input type="search" id="busqueda" name="q" value="{{ busqueda }}" placeholder="Nombre del asegurado"></div><button class="button secondary" type="submit">Buscar</button>{% if busqueda %}<a class="text-link" href="{% url 'interfaz:asegurados' %}">Limpiar</a>{% endif %}</form></section>
+<section class="card"><div class="card-header"><h2>Fichas de asegurados <span class="badge muted">{{ asegurados|length }}</span></h2></div>
+{% if asegurados %}<div class="table-wrap"><table class="data-table"><thead><tr><th scope="col">Nombre</th><th scope="col">Pólizas</th><th scope="col">Ficha</th></tr></thead><tbody>{% for asegurado in asegurados %}<tr><td>{{ asegurado.nombre }}</td><td>{{ asegurado.total_polizas }}</td><td><a class="text-link" href="{% url 'interfaz:asegurado_detalle' asegurado.id %}">Ver asegurado →</a></td></tr>{% endfor %}</tbody></table></div>{% else %}<div class="empty-state"><strong>No hay asegurados que coincidan.</strong><p>Registra una ficha o cambia la búsqueda.</p></div>{% endif %}
+</section>
+{% endblock %}
