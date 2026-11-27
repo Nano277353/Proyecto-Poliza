@@ -5,6 +5,7 @@ SECRET_KEY = 'django-insecure-esqueleto-solo-desarrollo-local'
 DEBUG = True
 ALLOWED_HOSTS = ['localhost', '127.0.0.1', '[::1]']
 INSTALLED_APPS = [
+    'django.contrib.messages',
     'django.contrib.staticfiles',
     'urdiales_polizas.interfaz.apps.InterfazConfig',
 ]
@@ -12,6 +13,7 @@ MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
+    'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 ROOT_URLCONF = 'urdiales_polizas.sitio.urls'
@@ -21,8 +23,10 @@ TEMPLATES = [{
     'APP_DIRS': True,
     'OPTIONS': {'context_processors': [
         'django.template.context_processors.request',
+        'django.contrib.messages.context_processors.messages',
     ]},
 }]
+MESSAGE_STORAGE = 'django.contrib.messages.storage.cookie.CookieStorage'
 WSGI_APPLICATION = 'urdiales_polizas.sitio.wsgi.application'
 DATABASES = {'default': {
     'ENGINE': 'django.db.backends.sqlite3',

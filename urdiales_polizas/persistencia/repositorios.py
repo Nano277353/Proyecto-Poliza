@@ -352,13 +352,26 @@ def datos_poliza(poliza_id):
 
 
 @transaction.atomic
-def actualizar_datos_poliza(poliza_id, responsable=None, aplica_anticipacion=None):
+def actualizar_datos_poliza(poliza_id, responsable=None, aplica_anticipacion=None,
+                            aseguradora_id=None, descripcion_riesgo=None):
     actual = datos_poliza(poliza_id)
-    _ejecutar('UPDATE polizas SET responsable = %s, aplica_anticipacion = %s WHERE id = %s', [
+    if actual['estado'] == EstadoPoliza.CANCELADA.value:
+        raise ValueError('Una póliza cancelada no se edita.')
+    if actual['tipo'] == 'danios':
+        riesgo = _espacios(actual['descripcion_riesgo'] if descripcion_riesgo is None else descripcion_riesgo)
+        if not riesgo:
+            raise ValueError('La descripción del riesgo es obligatoria.')
+    else:
+        riesgo = None
+    _ejecutar('''UPDATE polizas SET responsable = %s, aplica_anticipacion = %s,
+                aseguradora_id = %s, descripcion_riesgo = %s WHERE id = %s''', [
         _espacios(actual['responsable'] if responsable is None else responsable),
         int(bool(actual['aplica_anticipacion'] if aplica_anticipacion is None else aplica_anticipacion)),
+        actual['aseguradora_id'] if aseguradora_id is None else _id(aseguradora_id, 'aseguradora'),
+        riesgo,
         actual['id'],
     ])
+    obtener_poliza(poliza_id)
 
 
 @transaction.atomic
@@ -409,6 +422,13 @@ def registrar_pago(cobro_id):
     cobro = Cobro(fila['fecha_vencimiento'], fila['estado'])
     cobro.marcar_pagado()
     _ejecutar('UPDATE cobros SET estado = %s WHERE id = %s', [cobro.estado, cobro_id])
+
+
+def datos_cobro(cobro_id):
+    return _uno('''SELECT c.id, c.estado, v.archivada, v.poliza_id, p.estado AS estado_poliza
+                   FROM cobros c JOIN vigencias v ON v.id = c.vigencia_id
+                   JOIN polizas p ON p.id = v.poliza_id WHERE c.id = %s''',
+                [_id(cobro_id, 'cobro')], 'No se encontró el cobro.')
 
 
 # --------------------------------------------------------------------------- correcciones (RF-04)
@@ -466,6 +486,53 @@ def actualizar_vigencia(vigencia_id, numero_poliza=None, fecha_inicio=None, fech
 def listar_vehiculos(vigencia_id):
     return _filas('SELECT id, vigencia_id, descripcion, modelo, serie, inciso FROM vehiculos_asegurados '
                   'WHERE vigencia_id = %s ORDER BY id', [_id(vigencia_id, 'vigencia')])
+
+
+@transaction.atomic
+def reemplazar_vehiculos(vigencia_id, vehiculos):
+    """Corrige las unidades de la vigencia actual; el dominio valida el conjunto."""
+    actual = _vigencia_editable(vigencia_id)
+    if actual['tipo'] != 'autos':
+        raise ValueError('Una póliza de daños no tiene vehículos.')
+    validados = [_vehiculo(v) for v in vehiculos]
+    _ejecutar('DELETE FROM vehiculos_asegurados WHERE vigencia_id = %s', [actual['id']])
+    for vehiculo in validados:
+        _ejecutar('''INSERT INTO vehiculos_asegurados (vigencia_id, descripcion, modelo, serie, inciso)
+                     VALUES (%s, %s, %s, %s, %s)''',
+                  [actual['id'], vehiculo.descripcion, vehiculo.modelo, vehiculo.serie, vehiculo.inciso])
+    obtener_poliza(actual['poliza_id'])
+
+
+@transaction.atomic
+def reemplazar_cobros_pendientes(vigencia_id, cobros):
+    """Actualiza fechas pendientes y conserva los cobros ya pagados."""
+    actual = _vigencia_editable(vigencia_id)
+    existentes = listar_cobros(vigencia_id)
+    conocidos = {c['id']: c for c in existentes}
+    enviados = set()
+    nuevos = []
+    for datos in cobros:
+        cobro = _cobro(datos)
+        identificador = datos.get('id')
+        if identificador:
+            identificador = _id(identificador, 'cobro')
+            if identificador not in conocidos or identificador in enviados:
+                raise ValueError('La lista de cobros cambió; vuelve a abrir la póliza.')
+            enviados.add(identificador)
+            original = conocidos[identificador]
+            if original['estado'] == 'pagado':
+                if (cobro.estado != 'pagado' or
+                        cobro.fecha_vencimiento != original['fecha_vencimiento']):
+                    raise ValueError('Un cobro pagado se conserva sin cambios.')
+                continue
+        nuevos.append(cobro)
+    for original in existentes:
+        if original['estado'] == 'pagado' and original['id'] not in enviados:
+            raise ValueError('Un cobro pagado no se puede eliminar.')
+    _ejecutar('DELETE FROM cobros WHERE vigencia_id = %s AND estado = %s',
+              [actual['id'], 'pendiente'])
+    for cobro in nuevos:
+        agregar_cobro(actual['id'], cobro.fecha_vencimiento, cobro.estado)
 
 
 @transaction.atomic
